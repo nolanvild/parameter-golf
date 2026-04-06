@@ -77,41 +77,52 @@ We'd love to see weird & creative ideas in the challenge, since you never know w
 
 ## Getting Started
 
-### Training Your First Model (Mac with Apple Silicon)
+### Training Your First Model (Windows)
 
-If you have an Apple laptop or desktop with Apple Silicon, we've set up a simple MLX training script to help you start iterating locally.
+These instructions use [uv](https://docs.astral.sh/uv/) for fast, reproducible environment management. Install it first if you haven't:
 
-If you don't have a Mac with Apple Silicon, you can run an adapted version of this script without MLX support. Just ask [Codex](https://openai.com/codex/) to refactor it; the change is straightforward. It may still be fairly slow, so we recommend jumping straight to cloud GPUs with Runpod.
+```powershell
+winget install --id=astral-sh.uv -e
+```
 
-First, clone the repository, create a fresh Python environment, and install the packages needed for the MLX path plus dataset download:
+> **Note:** MLX is Apple Silicon only and is not available on Windows. The instructions below use a CPU/CUDA-compatible path. For meaningful training speed you'll want a GPU — see [Scaling Up to a Remote Machine](#scaling-up-to-a-remote-machine) below.
 
-```bash
+Clone the repository, create a virtual environment with `uv`, and install dependencies:
+
+```powershell
 git clone https://github.com/openai/parameter-golf.git
 cd parameter-golf
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install mlx numpy sentencepiece huggingface-hub datasets tqdm
+uv venv
+.venv\Scripts\activate
+uv pip install numpy sentencepiece huggingface-hub datasets tqdm torch
 ```
 
 Download our cached version of FineWeb with the 1024-token vocabulary:
 
-```bash
-python3 data/cached_challenge_fineweb.py --variant sp1024 --train-shards 10
+```powershell
+python data/cached_challenge_fineweb.py --variant sp1024 --train-shards 1
 ```
 
 This populates `./data/datasets/fineweb10B_sp1024/` and `./data/tokenizers/`.
-By default this downloads the full validation split plus 80 training shards (8B tokens). For a smaller local smoke subset, pass `--train-shards 1`, for example `python3 data/cached_challenge_fineweb.py --variant sp1024 --train-shards 1`.
+Pass `--train-shards 10` for a larger local subset, or omit it entirely for the full 80 shards (8B tokens).
 
-Then run a small MLX training job:
+> **Windows tip:** You may see a symlinks warning from `huggingface_hub`. To suppress it, set `$env:HF_HUB_DISABLE_SYMLINKS_WARNING=1` before running, or enable Developer Mode in Windows Settings to allow symlinks without admin elevation.
 
-```bash
-RUN_ID=mlx_smoke \
-ITERATIONS=200 \
-TRAIN_BATCH_TOKENS=8192 \
-VAL_LOSS_EVERY=0 \
-VAL_BATCH_SIZE=8192 \
-python3 train_gpt_mlx.py
+Then run a small smoke training job (PowerShell):
+
+```powershell
+$env:RUN_ID="smoke_local"
+$env:ITERATIONS="200"
+$env:TRAIN_BATCH_TOKENS="8192"
+$env:VAL_LOSS_EVERY="0"
+$env:VAL_BATCH_SIZE="8192"
+python train_gpt.py
+```
+
+Or as a one-liner:
+
+```powershell
+$env:RUN_ID="smoke_local"; $env:ITERATIONS="200"; $env:TRAIN_BATCH_TOKENS="8192"; $env:VAL_LOSS_EVERY="0"; $env:VAL_BATCH_SIZE="8192"; python train_gpt.py
 ```
 
 Validation always runs on the full `fineweb_val_*` split, which is the fixed first-50k-document set. The smoke command above skips periodic validation and just prints the final `val_loss` and `val_bpb` once at the end.
@@ -148,11 +159,23 @@ This defaults to the full validation split plus 80 training shards (8B tokens). 
 
 Launch your first training run. Note that we're passing `nproc_per_node=1` because we're running on a single H100 GPU in this case.
 
+**Linux/macOS (RunPod):**
+
 ```bash
 RUN_ID=baseline_sp1024 \
 DATA_PATH=./data/datasets/fineweb10B_sp1024/ \
 TOKENIZER_PATH=./data/tokenizers/fineweb_1024_bpe.model \
 VOCAB_SIZE=1024 \
+torchrun --standalone --nproc_per_node=1 train_gpt.py
+```
+
+**Windows (PowerShell, if running locally):**
+
+```powershell
+$env:RUN_ID="baseline_sp1024"
+$env:DATA_PATH="./data/datasets/fineweb10B_sp1024/"
+$env:TOKENIZER_PATH="./data/tokenizers/fineweb_1024_bpe.model"
+$env:VOCAB_SIZE="1024"
 torchrun --standalone --nproc_per_node=1 train_gpt.py
 ```
 
